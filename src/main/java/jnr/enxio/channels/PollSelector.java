@@ -16,6 +16,7 @@
 
 package jnr.enxio.channels;
 
+import java.util.concurrent.atomic.AtomicInteger;
 import jnr.constants.platform.Errno;
 
 import java.io.IOException;
@@ -43,11 +44,16 @@ class PollSelector extends java.nio.channels.spi.AbstractSelector {
     static final int POLLERR = 0x8;
     static final int POLLHUP = 0x10;
 
-    
+
+    private static AtomicInteger nextId;
+
     private PollSelectionKey[] keyArray = new PollSelectionKey[0];
     private ByteBuffer pollData = null;
     private int nfds;
-    
+
+    private int id;
+    private Thread creator;
+
     private final int[] pipefd = { -1, -1 };
     private final Object regLock = new Object();
     
@@ -64,6 +70,9 @@ class PollSelector extends java.nio.channels.spi.AbstractSelector {
         putPollEvents(0, POLLIN);
         nfds = 1;
         keyArray = new PollSelectionKey[1];
+
+        id = nextId.getAndAdd(1);
+        creator = Thread.currentThread();
     }
     
     private void putPollFD(int idx, int fd) {
@@ -92,6 +101,7 @@ class PollSelector extends java.nio.channels.spi.AbstractSelector {
 
     @Override
     protected void implCloseSelector() throws IOException {
+        log("close");
         if (pipefd[0] != -1) {
             Native.close(pipefd[0]);
         }
@@ -107,6 +117,7 @@ class PollSelector extends java.nio.channels.spi.AbstractSelector {
 
     @Override
     protected SelectionKey register(AbstractSelectableChannel ch, int ops, Object att) {
+        log(String.format("registering fd %d", ((NativeSelectableChannel)ch).getFD()));
         PollSelectionKey key = new PollSelectionKey(this, (NativeSelectableChannel) ch);
         add(key);
         key.attach(att);
@@ -116,11 +127,13 @@ class PollSelector extends java.nio.channels.spi.AbstractSelector {
 
     @Override
     public Set<SelectionKey> keys() {
+        log(String.format("getting keys: %s", Arrays.asList(keyArray).subList(0, nfds).toString()));
         return new HashSet<SelectionKey>(Arrays.asList(keyArray).subList(0, nfds));
     }
 
     @Override
     public Set<SelectionKey> selectedKeys() {
+        log(String.format("getting selected keys: %s", Arrays.asList(selected).toString()));
         return selected;
     }
 
@@ -190,18 +203,21 @@ class PollSelector extends java.nio.channels.spi.AbstractSelector {
 
     @Override
     public int selectNow() throws IOException {
+        log("no wait select");
         return poll(0);
     }
 
 
     @Override
     public int select(long timeout) throws IOException {
+        log(String.format("select with %d timeout", timeout));
         return poll(timeout > 0 ? timeout : -1);
     }
 
 
     @Override
     public int select() throws IOException {
+        log("blocking select");
         return poll(-1);
     }
 
@@ -278,6 +294,7 @@ class PollSelector extends java.nio.channels.spi.AbstractSelector {
 
     @Override
     public Selector wakeup() {
+        log("wakeup!");
         try {
             Native.write(pipefd[1], ByteBuffer.allocate(1));
         } catch (IOException ioe) {
@@ -285,5 +302,16 @@ class PollSelector extends java.nio.channels.spi.AbstractSelector {
         }
 
         return this;
+    }
+
+    private void log(String message) {
+        System.console().printf(
+            "%s: Selector %d - Thread %d - Calling Thread - %d -> %s\n",
+            Thread.currentThread().getStackTrace()[2].getMethodName(),
+            id,
+            creator.getId(),
+            Thread.currentThread().getId(),
+            message
+        );
     }
 }
