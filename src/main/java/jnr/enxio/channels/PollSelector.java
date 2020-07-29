@@ -45,7 +45,7 @@ class PollSelector extends java.nio.channels.spi.AbstractSelector {
     static final int POLLHUP = 0x10;
 
 
-    private static AtomicInteger nextId;
+    private static AtomicInteger nextId = new AtomicInteger();
 
     private PollSelectionKey[] keyArray = new PollSelectionKey[0];
     private ByteBuffer pollData = null;
