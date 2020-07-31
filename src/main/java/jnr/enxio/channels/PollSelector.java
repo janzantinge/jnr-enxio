@@ -306,7 +306,7 @@ class PollSelector extends java.nio.channels.spi.AbstractSelector {
 
     private void log(String message) {
         System.out.printf(
-            "%s: Selector %d - Thread %d - Calling Thread - %d -> %s\n",
+            "%s: Selector %d - Thread %d - Calling Thread - %d -> %s%n",
             Thread.currentThread().getStackTrace()[2].getMethodName(),
             id,
             creator.getId(),
